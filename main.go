@@ -14,17 +14,22 @@ import (
 
 func main() {
 	cmd := exec.Command("git", "ls-files")
-	out, err := cmd.Output()
+	files, err := cmd.Output()
 	if err != nil {
 		fmt.Println(fmt.Errorf("ERROR on git ls-files! %v", err))
 		return
 	}
-	fmt.Printf("Out is:\n%s", out)
 
-	fmt.Println("Iterate over files:")
-	scanner := bufio.NewScanner(bytes.NewReader(out))
+	out, err := os.Create("mtimer.dat")
+	if err != nil {
+		panic("Error opening file")
+	}
+	defer out.Close()
+
+	scanner := bufio.NewScanner(bytes.NewReader(files))
 	for scanner.Scan() {
-		fmt.Println("File:", scanner.Text())
+		out.WriteString("File: ")
+		out.WriteString(scanner.Text() + "\n")
 	}
 
 	t, err := times.Stat("main.go")
