@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -18,6 +20,12 @@ func main() {
 		return
 	}
 	fmt.Printf("Out is:\n%s", out)
+
+	fmt.Println("Iterate over files:")
+	scanner := bufio.NewScanner(bytes.NewReader(out))
+	for scanner.Scan() {
+		fmt.Println("File:", scanner.Text())
+	}
 
 	t, err := times.Stat("main.go")
 	if err != nil {
