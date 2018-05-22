@@ -4,10 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
-	"time"
 
 	"github.com/djherbis/times"
 )
@@ -28,21 +26,17 @@ func main() {
 
 	scanner := bufio.NewScanner(bytes.NewReader(files))
 	for scanner.Scan() {
-		out.WriteString("File: ")
-		out.WriteString(scanner.Text() + "\n")
-	}
-
-	t, err := times.Stat("main.go")
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-
-	fmt.Println("main.go mtime: ", t.ModTime())
-
-	mtime := time.Date(2006, time.February, 1, 3, 4, 5, 0, time.UTC)
-	atime := mtime
-	if err := os.Chtimes("main.go", atime, mtime); err != nil {
-		log.Fatal(err)
+		fileName := scanner.Text()
+		t, err := times.Stat(fileName)
+		if err != nil {
+			fmt.Println("WARNING: ", err.Error())
+			continue
+		}
+		out.WriteString(fileName + "\n")
+		mtime := t.ModTime()
+		// if err := os.Chtimes(fileName, mtime, mtime); err != nil {
+		// 	log.Fatal(err)
+		// }
+		out.WriteString(mtime.String() + "\n")
 	}
 }
