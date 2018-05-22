@@ -47,7 +47,7 @@ func main() {
 			}
 			out.WriteString(fileName + "\n")
 			mtime := t.ModTime()
-			out.WriteString(mtime.String() + "\n")
+			out.WriteString(mtime.Format(string(time.RFC3339)) + "\n")
 		}
 	} else if apply {
 		fmt.Println("APPLY MODE")
@@ -62,9 +62,9 @@ func main() {
 			fileName := fileScanner.Text()
 			fileScanner.Scan()
 			fileMtimeText := fileScanner.Text()
-			fileMtime, err := time.Parse("2018-05-22 14:32:08 +0300 MSK", fileMtimeText)
+			fileMtime, err := time.Parse(time.RFC3339, fileMtimeText)
 			if err != nil {
-				fmt.Println("WARNING: Can't parse mtime", fileMtimeText, "for file", fileName)
+				fmt.Println("WARNING: Can't parse mtime", fileMtimeText, "for file", fileName, err)
 				continue
 			}
 
