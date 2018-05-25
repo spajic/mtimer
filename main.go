@@ -7,40 +7,51 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/djherbis/times"
 )
 
+var path string
 var store bool
 var apply bool
 
 func init() {
-	flag.BoolVar(&store, "store", false, "-store to store mtimes")
-	flag.BoolVar(&apply, "apply", false, "-apply to apply stored mtimes from mtimer.dat")
+	flag.StringVar(&path, "path", "", "path to folder with files")
+	flag.BoolVar(&store, "store", false, "to store mtimes")
+	flag.BoolVar(&apply, "apply", false, "to apply stored mtimes from mtimer.dat")
 }
 
 func main() {
 	flag.Parse()
+	if path == "" {
+		fmt.Println("PATH NOT SPECIFIED! EXIT NOW!")
+		return
+	}
 	if store && !apply {
 		fmt.Println("STORE MODE")
-		cmd := exec.Command("git", "ls-files")
+		fmt.Println("Working with path =", path)
+		cmd := exec.Command("find", ".", "-and", "-not", "-path", "./node_modules*", "-and", "-not", "-path", "./tmp*")
+		cmd.Dir = path
 		files, err := cmd.Output()
 		if err != nil {
-			fmt.Println(fmt.Errorf("ERROR on git ls-files! %v", err))
+			fmt.Println(fmt.Errorf("ERROR on list files. EXIT NOW, %v", err))
 			return
 		}
 
-		out, err := os.Create("mtimer.dat")
+		pathToMtimerDat := path + "/mtimer.dat"
+		fmt.Println("Create file", pathToMtimerDat)
+		out, err := os.Create(pathToMtimerDat)
 		if err != nil {
-			panic("Error opening file")
+			panic("Error creating file " + pathToMtimerDat + ". EXIT NOW")
 		}
 		defer out.Close()
 
 		scanner := bufio.NewScanner(bytes.NewReader(files))
 		for scanner.Scan() {
-			fileName := scanner.Text()
-			t, err := times.Stat(fileName)
+			fileName := strings.Replace(scanner.Text(), ".", "", 1)
+			t, err := times.Stat(path + fileName)
 			if err != nil {
 				fmt.Println("WARNING: ", err.Error())
 				continue
@@ -49,9 +60,10 @@ func main() {
 			mtime := t.ModTime()
 			out.WriteString(mtime.Format(string(time.RFC3339)) + "\n")
 		}
+		fmt.Println("FINISHED SUCCESSFULLY")
 	} else if apply {
 		fmt.Println("APPLY MODE")
-		fileHandle, err := os.Open("mtimer.dat")
+		fileHandle, err := os.Open("/busfor/releases/building/mtimer.dat")
 		if err != nil {
 			fmt.Println("CANT OPEN FILE mtimer.dat! FINISH")
 			return
@@ -59,7 +71,7 @@ func main() {
 		defer fileHandle.Close()
 		fileScanner := bufio.NewScanner(fileHandle)
 		for fileScanner.Scan() {
-			fileName := fileScanner.Text()
+			fileName := "/busfor/releases/building/" + fileScanner.Text()
 			fileScanner.Scan()
 			fileMtimeText := fileScanner.Text()
 			fileMtime, err := time.Parse(time.RFC3339, fileMtimeText)
@@ -69,10 +81,11 @@ func main() {
 			}
 
 			if err := os.Chtimes(fileName, fileMtime, fileMtime); err != nil {
-				fmt.Println(err)
-				return
+				fmt.Println("WARNING:", err)
+				continue
 			}
 		}
+		fmt.Println("FINISHED SUCCESSFULLY")
 	} else {
 		fmt.Println("Use with -store or -apply flag")
 	}
