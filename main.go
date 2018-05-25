@@ -48,6 +48,7 @@ func main() {
 		}
 		defer out.Close()
 
+		readFiles := 0
 		scanner := bufio.NewScanner(bytes.NewReader(files))
 		for scanner.Scan() {
 			fileName := strings.Replace(scanner.Text(), ".", "", 1)
@@ -59,19 +60,24 @@ func main() {
 			out.WriteString(fileName + "\n")
 			mtime := t.ModTime()
 			out.WriteString(mtime.Format(string(time.RFC3339)) + "\n")
+			readFiles++
 		}
+		fmt.Println("Stored mtimes of", readFiles, "files")
 		fmt.Println("FINISHED SUCCESSFULLY")
 	} else if apply {
 		fmt.Println("APPLY MODE")
-		fileHandle, err := os.Open("/busfor/releases/building/mtimer.dat")
+		pathToMtimerDat := path + "/mtimer.dat"
+		fmt.Println("Applying mtimes from", pathToMtimerDat)
+		fileHandle, err := os.Open(pathToMtimerDat)
 		if err != nil {
 			fmt.Println("CANT OPEN FILE mtimer.dat! FINISH")
 			return
 		}
 		defer fileHandle.Close()
 		fileScanner := bufio.NewScanner(fileHandle)
+		updatedCount := 0
 		for fileScanner.Scan() {
-			fileName := "/busfor/releases/building/" + fileScanner.Text()
+			fileName := path + fileScanner.Text()
 			fileScanner.Scan()
 			fileMtimeText := fileScanner.Text()
 			fileMtime, err := time.Parse(time.RFC3339, fileMtimeText)
@@ -84,7 +90,9 @@ func main() {
 				fmt.Println("WARNING:", err)
 				continue
 			}
+			updatedCount++
 		}
+		fmt.Println("Updated mtimes of", updatedCount, "files")
 		fmt.Println("FINISHED SUCCESSFULLY")
 	} else {
 		fmt.Println("Use with -store or -apply flag")
