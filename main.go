@@ -13,7 +13,7 @@ import (
 	"github.com/djherbis/times"
 )
 
-const version = "0.0.1"
+const version = "0.0.2"
 
 var filespath string
 var timespath string
@@ -94,7 +94,7 @@ func logStart() {
 	} else {
 		modeString = "apply"
 	}
-	fmt.Println("Start mtimer in", modeString, "mode:, ")
+	fmt.Println("Start mtimer in", modeString, "mode")
 	fmt.Println("filespath =", filespath)
 	fmt.Println("timespath =", timespath)
 	fmt.Println("ignoreFolders =", ignoreFolders)
