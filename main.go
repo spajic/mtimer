@@ -16,7 +16,7 @@ import (
 	"github.com/djherbis/times"
 )
 
-const version = "0.1.0"
+const version = "0.1.1"
 
 var filespath string
 var timespath string
@@ -217,7 +217,7 @@ func applyMtimes() {
 		}
 
 		if storedHash != hash {
-			fmt.Printf("mtimer info: file %s changed, not updating mtime\n", filespath+fileName)
+			fmt.Printf("mtimer info: file %s changed, not updating mtime\n", fileName)
 			continue
 		}
 
