@@ -13,95 +13,145 @@ import (
 	"github.com/djherbis/times"
 )
 
+const version = "0.0.1"
+
 var filespath string
 var timespath string
 var store bool
 var apply bool
+var showVersion bool
+var showHelp bool
+
+const help = `mtimer cat store and apply mtimes of file in given directory
+
+Usage examples:
+"mtimer --store --filespath=/path/to/files --timespath=/path/to_mtimer_dat" - store mtimes of file from filespath to mtimer.dat
+"mtimer --apply --filespath=/path/to/files --timespath=/path/to_mtimer_dat" - apply mtimes from mtimer.dat to files in filespath
+"mtimer --version" - show version and exit
+"mtimer --help" - show this help
+`
 
 func init() {
 	flag.StringVar(&filespath, "filespath", "", "path to folder with files")
 	flag.StringVar(&timespath, "timespath", "", "path to folder with mtimer.dat")
-	flag.BoolVar(&store, "store", false, "to store mtimes")
-	flag.BoolVar(&apply, "apply", false, "to apply stored mtimes from mtimer.dat")
+	flag.BoolVar(&store, "store", false, "store mtimes to mtimer.dat")
+	flag.BoolVar(&apply, "apply", false, "apply stored mtimes from mtimer.dat")
+	flag.BoolVar(&showVersion, "version", false, "show version")
+	flag.BoolVar(&showHelp, "help", false, "show help")
 }
 
 func main() {
 	flag.Parse()
-	if filespath == "" {
-		fmt.Println("filespath NOT SPECIFIED! EXIT NOW!")
-		return
+	if showHelp {
+		showHelpAndExit()
 	}
-	if timespath == "" {
-		fmt.Println("timespath NOT SPECIFIED! EXIT NOW!")
-		return
+	if showVersion {
+		showVersionAndExit()
 	}
-	if store && !apply {
-		fmt.Println("STORE MODE")
-		fmt.Println("Working with path =", filespath)
-		cmd := exec.Command("find", ".", "-not", "-path", "./node_modules*", "-and", "-not", "-path", "./tmp*")
-		cmd.Dir = filespath
-		files, err := cmd.Output()
-		if err != nil {
-			fmt.Println(fmt.Errorf("ERROR on list files. EXIT NOW, %v", err))
-			return
-		}
+	if filespath == "" || timespath == "" {
+		showErrorMessageAndExit("Need to specify --filespath and --timespath.")
+	}
+	if !store && !apply || (store && apply) {
+		showErrorMessageAndExit("Need to specify --store or --apply mode.")
+	}
 
-		pathToMtimerDat := timespath + "/mtimer.dat"
-		fmt.Println("Create file", pathToMtimerDat)
-		out, err := os.Create(pathToMtimerDat)
-		if err != nil {
-			panic("Error creating file " + pathToMtimerDat + ". EXIT NOW")
-		}
-		defer out.Close()
-
-		readFiles := 0
-		scanner := bufio.NewScanner(bytes.NewReader(files))
-		for scanner.Scan() {
-			fileName := strings.Replace(scanner.Text(), ".", "", 1)
-			t, err := times.Stat(filespath + fileName)
-			if err != nil {
-				fmt.Println("WARNING: ", err.Error())
-				continue
-			}
-			out.WriteString(fileName + "\n")
-			mtime := t.ModTime()
-			out.WriteString(mtime.Format(string(time.RFC3339)) + "\n")
-			readFiles++
-		}
-		fmt.Println("Stored mtimes of", readFiles, "files")
-		fmt.Println("FINISHED SUCCESSFULLY")
-	} else if apply {
-		fmt.Println("APPLY MODE")
-		pathToMtimerDat := timespath + "/mtimer.dat"
-		fmt.Println("Applying mtimes from", pathToMtimerDat)
-		fmt.Println("Updating files in", filespath)
-		fileHandle, err := os.Open(pathToMtimerDat)
-		if err != nil {
-			fmt.Println("CANT OPEN FILE mtimer.dat! FINISH")
-			return
-		}
-		defer fileHandle.Close()
-		fileScanner := bufio.NewScanner(fileHandle)
-		updatedCount := 0
-		for fileScanner.Scan() {
-			fileName := filespath + fileScanner.Text()
-			fileScanner.Scan()
-			fileMtimeText := fileScanner.Text()
-			fileMtime, err := time.Parse(time.RFC3339, fileMtimeText)
-			if err != nil {
-				fmt.Println("WARNING: Can't parse mtime", fileMtimeText, "for file", fileName, err)
-				continue
-			}
-
-			if err := os.Chtimes(fileName, fileMtime, fileMtime); err != nil {
-				fmt.Println("WARNING:", err)
-				continue
-			}
-			updatedCount++
-		}
-		fmt.Println("Updated mtimes of", updatedCount, "files")
-		fmt.Println("FINISHED SUCCESSFULLY")
+	logStart()
+	if store {
+		storeMtimes()
 	} else {
-		fmt.Println("Use with ---store or --apply flag")
+		applyMtimes()
 	}
+}
+
+func showHelpAndExit() {
+	fmt.Println(help)
+	os.Exit(0)
+}
+func showVersionAndExit() {
+	fmt.Println(version)
+	os.Exit(0)
+}
+func showErrorMessageAndExit(message string) {
+	fmt.Println(message, "Exit now. Call 'mtimer --help' for help.")
+	os.Exit(1)
+}
+
+func checkErrOrExitWithMessage(err error, msg string) {
+	if err == nil {
+		return
+	}
+	fmt.Println(fmt.Errorf(msg+". Fatal error: %v. Exit now.", err))
+	os.Exit(1)
+}
+
+func logStart() {
+	var modeString string
+	if store {
+		modeString = "store"
+	} else {
+		modeString = "apply"
+	}
+	fmt.Println("Start mtimer in", modeString, "mode:\nfilespath =", filespath, "\ntimespath =", timespath)
+}
+
+func pathToMtimerDat() string {
+	return timespath + "/mtimer.dat"
+}
+
+func storeMtimes() {
+	listFilesCmd := exec.Command("find", ".", "-not", "-path", "./node_modules*", "-and", "-not", "-path", "./tmp*")
+	listFilesCmd.Dir = filespath
+	files, err := listFilesCmd.Output()
+	checkErrOrExitWithMessage(err, "Error in getting files list")
+
+	fmt.Println("Create file", pathToMtimerDat())
+	out, err := os.Create(pathToMtimerDat())
+	checkErrOrExitWithMessage(err, "Error creating mtimer.dat file")
+	defer out.Close()
+
+	readFilesCount := 0
+	scanner := bufio.NewScanner(bytes.NewReader(files))
+	for scanner.Scan() {
+		// Change ./file/name to /file/name
+		fileName := strings.Replace(scanner.Text(), ".", "", 1)
+
+		t, err := times.Stat(filespath + fileName)
+		if err != nil {
+			fmt.Println("mtimer warning: ", err.Error())
+			continue
+		}
+		out.WriteString(fileName + "\n")
+
+		mtime := t.ModTime()
+		out.WriteString(mtime.Format(string(time.RFC3339)) + "\n")
+
+		readFilesCount++
+	}
+	fmt.Println("Successfully stored mtimes of", readFilesCount, "files")
+}
+
+func applyMtimes() {
+	fileHandle, err := os.Open(pathToMtimerDat())
+	checkErrOrExitWithMessage(err, "Error opening mtimer.dat file")
+	defer fileHandle.Close()
+	fileScanner := bufio.NewScanner(fileHandle)
+	updatedFilesCount := 0
+	for fileScanner.Scan() {
+		fileName := filespath + fileScanner.Text()
+
+		fileScanner.Scan()
+		fileMtimeText := fileScanner.Text()
+		fileMtime, err := time.Parse(time.RFC3339, fileMtimeText)
+		if err != nil {
+			fmt.Println("mtimer warning: can't parse mtime", fileMtimeText, "for file", fileName, err)
+			continue
+		}
+
+		if err := os.Chtimes(fileName, fileMtime, fileMtime); err != nil {
+			fmt.Println("mtimer warning: can't update mtime", err)
+			continue
+		}
+		updatedFilesCount++
+	}
+	fmt.Println("Successfully Updated mtimes of", updatedFilesCount, "files")
 }
