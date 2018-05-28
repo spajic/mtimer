@@ -3,8 +3,11 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -105,22 +108,38 @@ func pathToMtimerDat() string {
 }
 
 // for flag ignoreFolders="first_folder,second_folder"
-// returns []string like [".", "-not", "-path", "./first_folder*", "-and", "-not", "-path", "./second_folder"]
+// returns []string like [".", "-not", "-path", "./first_folder*", "-and", "-not", "-path", "./second_folder", "-type", "f"]
 func findArgs() []string {
 	result := []string{"."}
-	if ignoreFolders == "" {
-		return result
-	}
-	folders := strings.Split(ignoreFolders, ",")
-	for i, folder := range folders {
-		result = append(result, "-not")
-		result = append(result, "-path")
-		result = append(result, "./"+folder+"*")
-		if i < (len(folders) - 1) {
-			result = append(result, "-and")
+	if ignoreFolders != "" {
+		folders := strings.Split(ignoreFolders, ",")
+		for i, folder := range folders {
+			result = append(result, "-not")
+			result = append(result, "-path")
+			result = append(result, "./"+folder+"*")
+			if i < (len(folders) - 1) {
+				result = append(result, "-and")
+			}
 		}
 	}
+	result = append(result, "-type")
+	result = append(result, "f")
 	return result
+}
+
+func fileHash(path string) (string, error) {
+	fileHandle, err := os.Open(path)
+	if err != nil {
+		err = fmt.Errorf("mtimer warning: failed to open file %s for hashsum: %v", path, err)
+		return "ERROR", err
+	}
+	defer fileHandle.Close()
+	hash := md5.New()
+	if _, err := io.Copy(hash, fileHandle); err != nil {
+		err = fmt.Errorf("mtimer warning: problem calculatiing hash for %s: %v", path, err)
+		return "ERROR", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)[:16]), nil
 }
 
 func storeMtimes() {
@@ -138,6 +157,7 @@ func storeMtimes() {
 	readFilesCount := 0
 	scanner := bufio.NewScanner(bytes.NewReader(files))
 	for scanner.Scan() {
+		// TODO: obtain convenient output from find command directly
 		// Change ./file/name to /file/name
 		fileName := strings.Replace(scanner.Text(), ".", "", 1)
 
@@ -146,16 +166,29 @@ func storeMtimes() {
 			fmt.Println("mtimer warning: ", err.Error())
 			continue
 		}
+
+		hash, err := fileHash(filespath + fileName)
+		if err != nil {
+			fmt.Println(err.Error())
+			continue
+		}
+
+		// write filename
 		out.WriteString(fileName + "\n")
 
+		// write mtime
 		mtime := t.ModTime()
 		out.WriteString(mtime.Format(string(time.RFC3339)) + "\n")
+
+		// write hash
+		out.WriteString(hash + "\n")
 
 		readFilesCount++
 	}
 	fmt.Println("Successfully stored mtimes of", readFilesCount, "files")
 }
 
+// If hash of file have changed - do not update mtime
 func applyMtimes() {
 	fileHandle, err := os.Open(pathToMtimerDat())
 	checkErrOrExitWithMessage(err, "Error opening mtimer.dat file")
@@ -167,9 +200,24 @@ func applyMtimes() {
 
 		fileScanner.Scan()
 		fileMtimeText := fileScanner.Text()
+
+		fileScanner.Scan()
+		storedHash := fileScanner.Text()
+
 		fileMtime, err := time.Parse(time.RFC3339, fileMtimeText)
 		if err != nil {
 			fmt.Println("mtimer warning: can't parse mtime", fileMtimeText, "for file", fileName, err)
+			continue
+		}
+
+		hash, err := fileHash(fileName)
+		if err != nil {
+			fmt.Println(err.Error())
+			continue
+		}
+
+		if storedHash != hash {
+			fmt.Printf("mtimer info: file %s changed, not updating mtime\n", filespath+fileName)
 			continue
 		}
 
