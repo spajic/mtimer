@@ -108,12 +108,15 @@ func pathToMtimerDat() string {
 // returns []string like [".", "-not", "-path", "./first_folder*", "-and", "-not", "-path", "./second_folder"]
 func findArgs() []string {
 	result := []string{"."}
+	if ignoreFolders == "" {
+		return result
+	}
 	folders := strings.Split(ignoreFolders, ",")
 	for i, folder := range folders {
 		result = append(result, "-not")
 		result = append(result, "-path")
 		result = append(result, "./"+folder+"*")
-		if i == (len(folders) - 1) {
+		if i < (len(folders) - 1) {
 			result = append(result, "-and")
 		}
 	}
@@ -122,6 +125,7 @@ func findArgs() []string {
 
 func storeMtimes() {
 	listFilesCmd := exec.Command("find", findArgs()...)
+	fmt.Println("List files with find", findArgs())
 	listFilesCmd.Dir = filespath
 	files, err := listFilesCmd.Output()
 	checkErrOrExitWithMessage(err, "Error in getting files list")
