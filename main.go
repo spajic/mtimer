@@ -17,6 +17,7 @@ const version = "0.0.1"
 
 var filespath string
 var timespath string
+var ignoreFolders string
 var store bool
 var apply bool
 var showVersion bool
@@ -26,6 +27,7 @@ const help = `mtimer cat store and apply mtimes of file in given directory
 
 Usage examples:
 "mtimer --store --filespath=/path/to/files --timespath=/path/to_mtimer_dat" - store mtimes of file from filespath to mtimer.dat
+"mtimer --store --ignore=node_modules,tmp,.git --filespath=/path --timespath=/path" - ignore specified subfolders
 "mtimer --apply --filespath=/path/to/files --timespath=/path/to_mtimer_dat" - apply mtimes from mtimer.dat to files in filespath
 "mtimer --version" - show version and exit
 "mtimer --help" - show this help
@@ -34,6 +36,7 @@ Usage examples:
 func init() {
 	flag.StringVar(&filespath, "filespath", "", "path to folder with files")
 	flag.StringVar(&timespath, "timespath", "", "path to folder with mtimer.dat")
+	flag.StringVar(&ignoreFolders, "ignore", "", "ignore folders")
 	flag.BoolVar(&store, "store", false, "store mtimes to mtimer.dat")
 	flag.BoolVar(&apply, "apply", false, "apply stored mtimes from mtimer.dat")
 	flag.BoolVar(&showVersion, "version", false, "show version")
@@ -91,15 +94,34 @@ func logStart() {
 	} else {
 		modeString = "apply"
 	}
-	fmt.Println("Start mtimer in", modeString, "mode:\nfilespath =", filespath, "\ntimespath =", timespath)
+	fmt.Println("Start mtimer in", modeString, "mode:, ")
+	fmt.Println("filespath =", filespath)
+	fmt.Println("timespath =", timespath)
+	fmt.Println("ignoreFolders =", ignoreFolders)
 }
 
 func pathToMtimerDat() string {
 	return timespath + "/mtimer.dat"
 }
 
+// for flag ignoreFolders="first_folder,second_folder"
+// returns []string like [".", "-not", "-path", "./first_folder*", "-and", "-not", "-path", "./second_folder"]
+func findArgs() []string {
+	result := []string{"."}
+	folders := strings.Split(ignoreFolders, ",")
+	for i, folder := range folders {
+		result = append(result, "-not")
+		result = append(result, "-path")
+		result = append(result, "./"+folder+"*")
+		if i == (len(folders) - 1) {
+			result = append(result, "-and")
+		}
+	}
+	return result
+}
+
 func storeMtimes() {
-	listFilesCmd := exec.Command("find", ".", "-not", "-path", "./node_modules*", "-and", "-not", "-path", "./tmp*")
+	listFilesCmd := exec.Command("find", findArgs()...)
 	listFilesCmd.Dir = filespath
 	files, err := listFilesCmd.Output()
 	checkErrOrExitWithMessage(err, "Error in getting files list")
